@@ -1,0 +1,375 @@
+---
+title: "Math62_Final_Project"
+author: "Nate Seluga, Alex Seager, Rohan Desai, Emmett Levine"
+date: "2025-04-30"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Question 1: Is where you live related to asthma rate?
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+brfss = read.csv("brfss2022_m62.csv", stringsAsFactors = TRUE)
+library(dplyr)
+```
+
+a)
+H0: The proportion of asthma cases is the same between urban and non-urban residents.
+HA: The proportions are different.
+```{r}
+# Urban vs non-urban asthma
+urban_asthma <- brfss %>%
+  filter(!is.na(urban), !is.na(asthma))
+
+prop.test(table(urban_asthma$urban, urban_asthma$asthma))
+```
+Since the p-value is 1.464e-07, we reject the null hypothesis. There is a significant difference between urban and non-urban asthma rates.
+
+b) 
+H0: The proportion of asthma cases is the same between metro and non-metro residents.
+HA: The proportions are different.
+```{r}
+# Metro vs non-metro asthma
+metro_asthma <- brfss %>%
+  filter(!is.na(metro), !is.na(asthma))
+
+prop.test(table(metro_asthma$metro, metro_asthma$asthma))
+```
+Since the p-value is 2.441e-08, we reject the null hypothesis. There is a significant difference between metro and non-metro asthma rates.
+
+# Question 2: Does at least one primary insurer have patients with a mean BMI that is significantly different from the others?
+The key intuition behind asking this question is that different insurers have different customer types; for example, some insurers may target wealthier, urban customers when compared to others. We're curious if this is true because if so, then we learn that insurance may provide a valuable prior for the overall health of a patient.
+```{r}
+# reading in our data and performing anova
+brfss_2 = read.csv("brfss2022_m62.csv", stringsAsFactors = TRUE)
+anova = aov(bmi ~ priminsur, data = brfss_2)
+```
+
+### Hypothesis
+$H_0$: Our null hypothesis is that the mean BMI is the same across all primary insurer groups.
+$H_A$: Our alternative hypothesis is that least one primary insurer group has a mean BMI that is different from the others.
+
+### Conditions
+We assume that each observation is independent, both within and across groups. This assumption is reasonable because the health of one individual in this huge survey is unlikely to give us a prior for the health of another individual.
+
+We also notice that we have constant variances across groups. This is highlighted by our residuals vs fitted graph in Appendix 2.1, which shows a random cloud with spread around 0.
+
+Lastly, we can reasonably claim that our residuals are normally distributed. Although our QQ plot in Appendix 2.2 shows deviation from the reference line, especially fairly strongly towards the right part of the data, we can proceed with ANOVA as the rest of the points seem fairly normal and since we have a large sample size of n, we can further approximate normality.
+
+Hence, we have met the necessary conditions and can proceed with ANOVA.
+
+### Test
+Using R, we can perform the ANOVA.
+```{r}
+summary(anova)
+```
+
+### Conclusion
+Since our p-value of $<2*10^{-16}$ is less than our significance level of $\alpha=0.05$, we reject our null hypothesis in favor of our alternative hypothesis. Hence, the data supports that one primary insurer has patients with different mean bmi than others.
+
+# Question 3: Is there a difference in rates of depressive disorders between smokers and non-smopkers
+
+H0: The proportion of depression diagnoses is the same between smokers and non-smokers.
+HA: The proportions are different.
+```{r}
+# Smoker status vs depression
+smoke_dep <- brfss %>%
+  filter(!is.na(smoker), !is.na(depress))
+
+prop.test(table(smoke_dep$smoker, smoke_dep$depress))
+```
+Since the p-value is 2.2e-16, we reject the null hypothesis. There is a significant difference between smoker and non-smoker depression rates.
+
+# Question 4: Is there a difference in weekly drinks between urban and non-urban residents?
+
+H0: The mean weekly drinks is the same between urban and non-urban residents.
+HA: The means are different.
+```{r}
+drinks_data <- brfss %>%
+  filter(!is.na(urban), !is.na(weeklydrinks))
+
+tapply(drinks_data$weeklydrinks, drinks_data$urban, mean, na.rm = TRUE)
+
+t.test(weeklydrinks ~ urban, data = drinks_data)
+```
+Since the p-value is 0.3817, we fail to reject the null hypothesis. There is no significant difference between urban and non-urban weekly drinks.
+
+# Question 5: How do race, age, and income predict average weekly drinks?
+
+Importing Data
+```{r}
+brfss_q5 = read.csv("brfss2022_m62.csv", stringsAsFactors=TRUE)
+```
+
+First, I examine each variable independently to verify assumptions of linearity and gain intuition to verify the linear regression. This analysis and the corresponding insights are available in Appendix 5.1.
+
+# Multiple Linear Regression
+First, I refactored the income and age levels so that they were numerical instead of categorical. To do this I used the lower bound of each interval which has some loss of information, but I found to be reasonable.
+
+```{r}
+brfss_q5$age_num <- as.numeric(
+  sub("^(\\d+).*", "\\1", as.character(brfss_q5$age))
+)
+
+inc_chr <- as.character(brfss_q5$income)
+brfss_q5$income_num <- ifelse(
+  grepl("Less than", inc_chr), 
+  0,
+  as.numeric(gsub(",", "", sub(".*\\$(\\d+).*", "\\1", inc_chr)))
+)
+
+brfss_clean <- subset(brfss_q5,
+                      complete.cases(age_num, income_num, race))
+brfss_clean$race <- droplevels(brfss_clean$race)
+# *Code adapted from stack overflow
+```
+
+Then I ran a multiple regression using age, income, and race to predict weekly drinks.
+```{r}
+model_cont <- lm(weeklydrinks ~ income_num + age_num + race,
+                 data = brfss_clean)
+coef(summary(model_cont))
+```
+
+We see that both age and income are statistically significant predictors of weekly drinks. Each race provides additional prediction although multiple races failed at the 0.05 significance level. A parsimonious model might omit race as the estimates were relatively smaller and insignificant compared to income and age. That said, at least one of our predictors appears to be nonlinear so this output may not be reliable.
+
+# Question 6: How do various factors predict mental health?
+
+```{r}
+brfss_finalpresentationEmmett <- read.csv("brfss2022_m62.csv", stringsAsFactors = TRUE)
+```
+
+### Remove missing values for mental health days and drop unused factor levels.
+
+```{r}
+brfss_clean <- brfss_finalpresentationEmmett[!is.na(brfss$daysmenthlthnotgood), ]
+
+brfss_clean <- droplevels(brfss_clean)
+
+```
+
+### Adjust income, general health, and marital status to be in meaningful order for analysis as default is alphabetical.
+
+```{r}
+brfss_clean$income <- factor(brfss_clean$income, levels = c(
+  "Less than $10000", "$10000 to $14999", "$15000 to $19999", "$20000 to $24999",
+  "$25000 to $34999", "$35000 to $49999", "$50000 to $74999", "$75000 to $99999",
+  "$100000 to $149999", "$150000 to $199999", "$200000 or more"
+))
+
+brfss_clean$genhealth <- factor(brfss_clean$genhealth, levels = c(
+  "poor", "fair", "good", "very good", "excellent"
+))
+
+brfss_clean$marital <- factor(brfss_clean$marital, levels = c(
+  "Never married", "Unmarried couple", "Divorced", "Separated", "Widowed", "Married"
+))
+```
+
+### Here, we examine how mental health days vary across income levels, general health, marital status, employment status, and bingedrinking status using boxplots.
+
+```{r}
+boxplot(daysmenthlthnotgood ~ income, data = brfss_clean,
+        main = "Mental Health Days by Income",
+        ylab = "Days Mental Health Not Good",
+        las = 2, cex.axis = 0.7, col = "skyblue")
+
+boxplot(daysmenthlthnotgood ~ genhealth, data = brfss_clean,
+        main = "Mental Health Days by General Health",
+        ylab = "Days Mental Health Not Good", las=2, 
+        col = "lightgreen")
+
+boxplot(daysmenthlthnotgood ~ marital, data = brfss_clean,
+        main = "Mental Health Days by Marital Status",
+        ylab = "Days Mental Health Not Good",
+        las = 2, cex.axis = 0.7, col = "salmon")
+
+boxplot(daysmenthlthnotgood ~ employment, data = brfss_clean,
+        main = "Mental Health Days by Employment",
+        ylab = "Days Mental Health Not Good",
+        las = 2, cex.axis = 0.7, col = "orange")
+
+boxplot(daysmenthlthnotgood ~ bingedrinker, data = brfss_clean,
+        main = "Mental Health Days by Binge Drinker",
+        ylab = "Days Mental Health Not Good",
+        col = "violet")
+
+```
+### It is visually apparent that:
+#### - lower income groups appear to report more poor mental health days on average
+#### - better general health is associated with fewer poor mental health days
+#### - those who are married tend to have fewer mental health days than most other marital categories
+#### - unemployed, less stably employed individuals, and students may report more poor mental health days
+#### - binge drinking shows some association with increased poor mental health days
+
+
+### While it is interesting to see the individual variables' correlations with mental health days, the question asks which of the factors is the best predictor of mental health. To model the relationship between multiple predictors and mental health, we use multiple regression.
+
+```{r}
+model <- lm(daysmenthlthnotgood ~ income + genhealth + marital + employment + bingedrinker, data = brfss_clean)
+
+summary(model)
+```
+### The output shows us the predicting power for each subvariable of each variable, and while this is interesting and important to note that all p-values are below 0.01 (besides employementHomemaker which is below 0.05), we can be highly confident that these predictors are not due to random chance. Yet, we hope to see which varaible best predicts mental health, so we look at the R squared values to assess the strength of each predictor individually. 
+
+```{r}
+summary(lm(daysmenthlthnotgood ~ income, data=brfss_clean))$r.squared
+summary(lm(daysmenthlthnotgood ~ genhealth, data=brfss_clean))$r.squared
+summary(lm(daysmenthlthnotgood ~ bingedrinker,data=brfss_clean))$r.squared
+summary(lm(daysmenthlthnotgood ~ employment, data=brfss_clean))$r.squared
+summary(lm(daysmenthlthnotgood ~ marital, data=brfss_clean))$r.squared
+
+```
+
+### To represent these final findings, we use a pie chart.
+
+
+
+```{r}
+importance <- c(
+  income = 0.08922552,
+  genhealth = 0.49121611,
+  marital = 0.10450825,
+  employment = 0.29482375,
+  bingedrinker = 0.02022638
+)
+
+importance_percent <- importance * 100
+
+pie(importance_percent,
+    main = "Relative Importance of Predictors of Mental Health Days",
+    col = rainbow(length(importance_percent)),
+    labels = paste(names(importance_percent), 
+                   sprintf("(%.1f%%)", importance_percent)),
+    clockwise = TRUE)
+
+```
+
+### The pie chart shows that the general health is the most important predictor of mental health days amongst the five given variables. Still, given a multiple R-squared of .1404 from the multiple regression suggests that only 14% of the variability in days of poor mental health can be explained by the model, which is not very high, even if it is statistically signficant.
+\newpage
+
+# Question 7: Are any pairs of heart attack, heart disease, cancer, COPD, depression, and diabetes correlated?
+
+### Calculations
+Using the code below, we can clean our data and print out a correlation matrix for our variables of interest.
+```{r}
+# reading in our data
+brfss_7 = read.csv("brfss2022_m62.csv", stringsAsFactors = TRUE)
+
+# clean the data to remove rows with NAs
+brfss_7 <- brfss_7[!is.na(brfss_7$heartattack) & 
+                     !is.na(brfss_7$heartdisease) & 
+                     !is.na(brfss_7$cancer) &
+                     !is.na(brfss_7$copd) &
+                     !is.na(brfss_7$depress) &
+                     !is.na(brfss_7$diabetes), ]
+
+# recoding yes/no values to being numeric
+brfss_7$heartattack <- ifelse(brfss_7$heartattack == "Yes", 1, 0)
+brfss_7$heartdisease <- ifelse(brfss_7$heartdisease == "Yes", 1, 0)
+brfss_7$cancer <- ifelse(brfss_7$cancer == "Yes", 1, 0)
+brfss_7$copd <- ifelse(brfss_7$copd == "Yes", 1, 0)
+brfss_7$depress <- ifelse(brfss_7$depress == "Yes", 1, 0)
+brfss_7$diabetes <- ifelse(brfss_7$diabetes == "Yes", 1, 0)
+
+# select variables of interest and calculate corr matrix
+selected_vars <- brfss_7[, c("heartattack", "heartdisease", "cancer", "copd", "depress", "diabetes")]
+cor_matrix <- cor(selected_vars, use = "pairwise.complete.obs")
+print(cor_matrix)
+```
+
+### Analysis
+From the matrix, we see that our strong $R^2$ value comes from the correlation between heart attack and heart disease; however, this value is still $0.45$, which means the correlation is only moderate. Intuitively, this makes sense that heart attack and heart disease are correlated, as we would expect someone with heart disease to be more likely to experience a heart attack.
+
+Outside this correlation, we see that all other $R^2$ values are under 0.25, which means that they are relatively weak. Although this result is somewhat disappointing as there are no obviously novel relationships, it makes sense— these variables likely work together in noisy ways to factor into the overall health of an individual, meaning that information on just one of them likely isn't enough to give a meaningful prior on another one. Although the data is likely related, this relationship is not explained through a simple linear relationship between two variables, as highlighted by our correlation matrix having low correlation coefficients!
+
+# Appendix
+
+## Appendix 2.1
+```{r}
+plot(anova, which = 1) # Source: https://stackoverflow.com/questions/29044055/plot-which-parameter-where-in-r
+```
+
+## Appendix 2.2
+```{r}
+plot(anova, which = 2)
+```
+
+## Appedix 5.1
+
+### Race
+```{r}
+# side-by-side boxplots
+# making it so u can read the x axis
+par(cex.axis = 0.3)
+par(mar = c(8, 4, 4, 2) + 0.1) 
+boxplot(weeklydrinks ~ race,
+        data   = brfss_q5,
+        main   = "Weekly Drinks by Race",
+        xlab   = "Race",
+        ylab   = "Weekly Drinks",
+        las    = 2,    # rotate x-axis labels for readability
+        outline = FALSE
+)
+```
+It appears that race and weekly drinks have significant correlation, although some groups are similar
+
+## Age
+```{r}
+# side-by-side boxplots
+# making it so u can read the x axis
+par(cex.axis = 0.5)
+par(mar = c(7, 4, 4, 2) + 0.1) 
+boxplot(weeklydrinks ~ age,
+        data   = brfss_q5,
+        main   = "Weekly Drinks by Age",
+        xlab   = "Age",
+        ylab   = "Weekly Drinks",
+        las    = 2,    # rotate x-axis labels for readability
+        outline = FALSE
+)
+```
+
+There is a clear inverse relationship between age and weekly drinks which appears to be linear, excluding the youngest group.
+
+## Income
+First I refactored the income levels so that they were in proper order
+```{r}
+# refactoring the income levels in proper order
+
+income_levels <- c(
+  "Less than $10000",
+  "$10000 to $14999",
+  "$15000 to $19999",
+  "$20000 to $24999",
+  "$25000 to $34999",
+  "$35000 to $49999",
+  "$50000 to $74999",
+  "$75000 to $99999",
+  "$100000 to $149999",
+  "$150000 to $199999",
+  "$200000 or more"
+)
+
+
+brfss_q5$income <- factor(brfss_q5$income, levels = income_levels)
+```
+
+Then I created side by side boxplots as i did above
+```{r}
+# side-by-side boxplots
+# making it so u can read the x axis
+par(cex.axis = 0.3)
+par(mar = c(7, 4, 4, 2) + 0.1) 
+boxplot(weeklydrinks ~ income,
+        data   = brfss_q5,
+        main   = "Weekly Drinks by Income",
+        xlab   = "Income",
+        ylab   = "Weekly Drinks",
+        las    = 2,    # rotate x-axis labels for readability
+        outline = FALSE
+)
+```
+There is a clear positive relationship between income and weekly drinks, although this relationship appears to be significantly non-linear.
