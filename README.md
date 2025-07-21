@@ -2,9 +2,6 @@
 
 A final project for Math 62 at Harvey Mudd College using R and R Markdown to analyze public health survey data from the BRFSS 2022 dataset.
 
-## 👥 Team
-Nate Seluga, Alex Seager, Rohan Desai, Emmett Levine
-
 ## 📊 Topics Explored
 - Asthma rates across urban vs metro regions
 - BMI by insurance type (ANOVA)
